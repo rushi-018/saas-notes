@@ -22,7 +22,7 @@ export async function GET() {
           WHEN duplicate_object THEN null;
         END $$
       `;
-      
+
       // Force create all tables
       await prisma.$executeRaw`
         CREATE TABLE IF NOT EXISTS "tenants" (
@@ -68,28 +68,43 @@ export async function GET() {
     }
 
     // Check if data already exists
+    const existingTenants = await prisma.tenant.findMany();
     const existingUsers = await prisma.user.findMany();
-    if (existingUsers.length > 0) {
+    
+    if (existingTenants.length > 0 || existingUsers.length > 0) {
       return NextResponse.json({
         success: true,
-        message: "Database already setup",
-        users: existingUsers.length,
+        message: "Database already setup with demo accounts",
+        data: {
+          tenants: existingTenants.length,
+          users: existingUsers.length,
+          accounts: existingUsers.map(u => ({ email: u.email, role: u.role })),
+          loginWith: {
+            email: "admin@acme.test",
+            password: "password"
+          }
+        }
       });
     }
 
     // Create demo data
     console.log("🌱 Creating demo accounts...");
 
-    const acme = await prisma.tenant.create({
-      data: {
+    // Use upsert to avoid duplicate key errors
+    const acme = await prisma.tenant.upsert({
+      where: { slug: "acme" },
+      update: {},
+      create: {
         name: "Acme Corporation",
         slug: "acme",
         subscription: "FREE",
       },
     });
 
-    const globex = await prisma.tenant.create({
-      data: {
+    const globex = await prisma.tenant.upsert({
+      where: { slug: "globex" },
+      update: {},
+      create: {
         name: "Globex Corporation",
         slug: "globex",
         subscription: "PRO",
@@ -98,8 +113,11 @@ export async function GET() {
 
     const hashedPassword = await bcrypt.hash("password", 12);
 
-    await prisma.user.create({
-      data: {
+    // Use upsert for users too
+    await prisma.user.upsert({
+      where: { email: "admin@acme.test" },
+      update: {},
+      create: {
         email: "admin@acme.test",
         password: hashedPassword,
         role: "ADMIN",
@@ -107,8 +125,10 @@ export async function GET() {
       },
     });
 
-    await prisma.user.create({
-      data: {
+    await prisma.user.upsert({
+      where: { email: "user@acme.test" },
+      update: {},
+      create: {
         email: "user@acme.test",
         password: hashedPassword,
         role: "MEMBER",
@@ -116,8 +136,10 @@ export async function GET() {
       },
     });
 
-    await prisma.user.create({
-      data: {
+    await prisma.user.upsert({
+      where: { email: "admin@globex.test" },
+      update: {},
+      create: {
         email: "admin@globex.test",
         password: hashedPassword,
         role: "ADMIN",
@@ -125,8 +147,10 @@ export async function GET() {
       },
     });
 
-    await prisma.user.create({
-      data: {
+    await prisma.user.upsert({
+      where: { email: "user@globex.test" },
+      update: {},
+      create: {
         email: "user@globex.test",
         password: hashedPassword,
         role: "MEMBER",
