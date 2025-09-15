@@ -8,35 +8,46 @@ export async function GET() {
   try {
     console.log("🌱 Starting database seeding...");
 
-    // Check if already has users
-    const existingUsers = await prisma.user.findMany();
-    if (existingUsers.length > 0) {
-      console.log(`✅ Database already has ${existingUsers.length} users`);
-      return NextResponse.json({
-        message: "Database already has users",
-        users: existingUsers.length,
-        existing: existingUsers.map((u) => ({ email: u.email, role: u.role })),
+    // Get or create tenants first
+    let acme = await prisma.tenant.findUnique({ where: { slug: "acme" } });
+    if (!acme) {
+      console.log("📊 Creating Acme tenant...");
+      acme = await prisma.tenant.create({
+        data: {
+          name: "Acme Corporation",
+          slug: "acme",
+          subscription: "FREE",
+        },
       });
     }
 
-    console.log("📊 Creating tenants...");
+    let globex = await prisma.tenant.findUnique({ where: { slug: "globex" } });
+    if (!globex) {
+      console.log("📊 Creating Globex tenant...");
+      globex = await prisma.tenant.create({
+        data: {
+          name: "Globex Corporation",
+          slug: "globex",
+          subscription: "PRO",
+        },
+      });
+    }
 
-    // Create tenants
-    const acme = await prisma.tenant.create({
-      data: {
-        name: "Acme Corporation",
-        slug: "acme",
-        subscription: "FREE",
-      },
-    });
-
-    const globex = await prisma.tenant.create({
-      data: {
-        name: "Globex Corporation",
-        slug: "globex",
-        subscription: "PRO",
-      },
-    });
+    // Check if we have all demo users (should be 4)
+    const existingUsers = await prisma.user.findMany();
+    if (existingUsers.length >= 4) {
+      console.log(`✅ Database already has ${existingUsers.length} users`);
+      return NextResponse.json({
+        success: true,
+        message: "All demo accounts already exist",
+        data: {
+          tenants: 2,
+          users: existingUsers.length,
+          accounts: existingUsers.map((u) => ({ email: u.email, role: u.role })),
+          loginWith: { email: "admin@acme.test", password: "password" }
+        }
+      });
+    }
 
     console.log("👥 Creating users...");
 
@@ -70,11 +81,14 @@ export async function GET() {
       },
     ];
 
-    // Create users one by one to handle any errors better
+    // Create users one by one using upsert to avoid conflicts
     const createdUsers = [];
     for (const userData of users) {
-      const user = await prisma.user.create({
-        data: userData,
+      // Use upsert to handle existing users gracefully
+      const user = await prisma.user.upsert({
+        where: { email: userData.email },
+        update: {}, // Don't update existing users
+        create: userData,
         select: {
           id: true,
           email: true,
@@ -89,7 +103,7 @@ export async function GET() {
         },
       });
       createdUsers.push(user);
-      console.log(`✅ Created user: ${user.email}`);
+      console.log(`✅ Ensured user exists: ${user.email}`);
     }
 
     console.log("🎉 Seeding completed successfully!");
@@ -100,7 +114,11 @@ export async function GET() {
       data: {
         tenants: 2,
         users: createdUsers.length,
-        accounts: createdUsers,
+        accounts: createdUsers.map(u => ({ email: u.email, role: u.role })),
+        loginWith: {
+          email: "admin@acme.test",
+          password: "password"
+        }
       },
     });
   } catch (error) {

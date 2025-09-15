@@ -70,7 +70,7 @@ export async function GET() {
     // Check if data already exists
     const existingTenants = await prisma.tenant.findMany();
     const existingUsers = await prisma.user.findMany();
-    
+
     if (existingTenants.length > 0 || existingUsers.length > 0) {
       return NextResponse.json({
         success: true,
@@ -78,12 +78,15 @@ export async function GET() {
         data: {
           tenants: existingTenants.length,
           users: existingUsers.length,
-          accounts: existingUsers.map(u => ({ email: u.email, role: u.role })),
+          accounts: existingUsers.map((u) => ({
+            email: u.email,
+            role: u.role,
+          })),
           loginWith: {
             email: "admin@acme.test",
-            password: "password"
-          }
-        }
+            password: "password",
+          },
+        },
       });
     }
 
